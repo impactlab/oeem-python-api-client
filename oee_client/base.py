@@ -1,3 +1,2 @@
-
 class Obj:
     pass
