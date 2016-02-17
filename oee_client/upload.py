@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor 
 
 def upload_consumption(records):
     """
@@ -6,6 +7,7 @@ def upload_consumption(records):
     """
     group_records_by_project
     group_by_consumption_metadata
+    #  Itertools group-by 
     for project, fuel_type, records in groups:
         if projec_exists(project):
             metadata = get_or_create_metadata(fuel_type)
@@ -22,6 +24,8 @@ def upload_projects(records):
     uploads them to the configured datastore. 
     """
     pass
+
+    ### functionalize and map this rather than for loop 
     for record in records: 
         record.upload()
         if status == 200
