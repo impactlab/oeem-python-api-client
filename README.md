@@ -1,5 +1,7 @@
-# oeem-python-api-client
+# oeem-uploader
 Python client for the oeem datastore
+
+[![Build Status](https://travis-ci.org/impactlab/oeem-uploader.svg?branch=master)](https://travis-ci.org/impactlab/oeem-uploader)
 
 ## Auth
 
