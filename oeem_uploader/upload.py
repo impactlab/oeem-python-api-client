@@ -1,13 +1,15 @@
-from concurrent.futures import ThreadPoolExecutor 
+from concurrent.futures import ThreadPoolExecutor
+
+from oeem_uploader.request import Request
 
 def upload_consumption(records):
     """
     Takes in a list of consumption records, uploads
-    to the configured oee datastore. 
+    to the configured oee datastore.
     """
     group_records_by_project
     group_by_consumption_metadata
-    #  Itertools group-by 
+    #  Itertools group-by
     for project, fuel_type, records in groups:
         if projec_exists(project):
             metadata = get_or_create_metadata(fuel_type)
@@ -19,22 +21,24 @@ def process_response():
     pass
 
 
+def upload_record(record, request):
+    return request.post('projects', data=record)
+
 
 def upload_projects(records):
     """
     Takes in a list of projects,
-    uploads them to the configured datastore. 
+    uploads them to the configured datastore.
     """
-    pass
-
-    ### functionalize and map this rather than for loop 
-    for record in records: 
-        record.upload()
-        if status == 200
-            good. 
-        elif status == 422|409: 
+    ### functionalize and map this rather than for loop
+    request = Request()
+    for record in records:
+        r = upload_record(record, request)
+        if r.status_code == 200:
+            pass
+        elif r.status_code == "422|409":
             attempt_update_project(record)
-        else: 
+        else:
             "LOG server or other error"
 
 def attempt_update_project(project):
@@ -54,3 +58,4 @@ def should_project_update(project):
     HTTP update or not. 
     """
     pass
+
