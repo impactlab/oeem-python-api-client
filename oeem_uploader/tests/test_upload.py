@@ -1,6 +1,6 @@
 from unittest import TestCase
 from oeem_uploader.request import Request
-from oeem_uploader.upload import upload_project
+from oeem_uploader.upload import upload_record
 
 
 class TestUpload(TestCase):
@@ -20,11 +20,14 @@ class TestUpload(TestCase):
                          "predicted_natural_gas_savings": "-43.28523139881372",
                          "project_cost": "6592.515721671437"
                          }]
+        self.request = Request()
 
     def test_upload_project(self):
-        response = upload_project(self.records[0])
+        response = upload_record(self.records[0],self.request)
+        resp_record_singleton = None
         for project in response.json():
-            if project == self.records[0]:
-                found_it = project
-        self.assertEqual(found_it,self.records[0])
+            if project['project_id'] == self.records[0]['project_id']:
+                resp_record_singleton = project
+        self.assertEqual(resp_record_singleton['project_id']
+                                            , self.records[0]['project_id'])
 

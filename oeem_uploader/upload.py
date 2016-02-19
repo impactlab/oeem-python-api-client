@@ -47,7 +47,8 @@ def attempt_update_project(project):
     """
     get_project_from_server 
     if projects == same():
-        log(already online)
+        int(1)
+        """log(already online)"""
     else:
         if should_i_update():
             project.update()
