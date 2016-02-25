@@ -31,3 +31,6 @@ class TestUpload(TestCase):
         self.assertEqual(resp_record_singleton['project_id']
                                             , self.records[0]['project_id'])
 
+    def test_upload_and_update_project(self):
+        pass
+

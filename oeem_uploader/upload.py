@@ -1,5 +1,4 @@
 #from concurrent.futures import ThreadPoolExecutor
-
 from oeem_uploader.request import Request
 
 def upload_consumption(records):
@@ -36,10 +35,8 @@ def upload_projects(records):
         r = upload_record(record, request)
         if r.status_code == 200:
             pass
-        elif r.status_code == "422|409":
-            attempt_update_project(record)
         else:
-            "LOG server or other error"
+            attempt_update_project(record)
 
 def attempt_update_project(project):
     """
