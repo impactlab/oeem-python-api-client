@@ -16,7 +16,6 @@ def upload_consumption(records):
             process_response(response)
 
 def process_response():
-    """NAME"""
     pass
 
 
@@ -44,7 +43,7 @@ def attempt_update_project(project):
     """
     get_project_from_server 
     if projects == same():
-        int(1)
+        pass 
         """log(already online)"""
     else:
         if should_i_update():
