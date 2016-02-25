@@ -19,9 +19,72 @@ def process_response():
     pass
 
 
-def upload_record(record, request):
-    return request.post('projects', data=record)
+def get_or_create(item_name, extra_info, get_url, create_url, data):
 
+
+    response = Request.get(get_url)
+
+    if response.status_code != 200:
+        message = "GET error ({}): {}\n{}".format(
+                response.status_code, get_url, response.text)
+        raise ValueError(message)
+
+    pks = [item["id"] for item in response.json()]
+
+    if pks == []:
+        response = Request.post(create_url,
+                                data)
+
+        if response.status_code != 201:
+            message = "Create POST error ({}): {}\n{}\n{}".format(
+                    response.status_code, create_url, data, response.text)
+            raise ValueError(message)
+
+        pk = response.json()["id"]
+
+        if verbose:
+            print("Created {} ({}, pk={})".format(item_name, extra_info, pk))
+
+        return pk, True
+    else:
+        pk = pks[0]
+
+        if len(pks) > 1:
+            message = (
+                "Found multiple {} instances ({}) for {}; using pk={}"
+                .format(item_name, pks, extra_info, pk)
+            )
+            warnings.warn(message)
+
+        if verbose:
+            print("Existing {} ({}, pk={})".format(item_name, extra_info, pk))
+
+        return pk, False
+
+def get_or_create_project(project_id, project_owner_id,
+        baseline_period_start, baseline_period_end,
+        reporting_period_start, reporting_period_end,
+        latitude, longitude, zipcode, weather_station, url, token, verify=True):
+
+    get_url = url + PROJECT_URL + "?project_id={}".format(project_id)
+    create_url = url + PROJECT_URL
+
+    data = {
+        "project_id": project_id,
+        "project_owner": project_owner_id,
+        "baseline_period_start": baseline_period_start,
+        "baseline_period_end": baseline_period_end,
+        "reporting_period_start": reporting_period_start,
+        "reporting_period_end": reporting_period_end,
+        "latitude": latitude,
+        "longitude": longitude,
+        "zipcode": zipcode,
+        "weather_station": weather_station,
+    }
+
+
+    return get_or_create("Project", project_id, get_url, create_url, data,
+            token, verify=True, verbose=True)
 
 def upload_projects(records):
     """
@@ -31,7 +94,7 @@ def upload_projects(records):
     ### functionalize and map this rather than for loop
     request = Request()
     for record in records:
-        r = upload_record(record, request)
+        r = get_or_create_project(record)
         if r.status_code == 200:
             pass
         else:
