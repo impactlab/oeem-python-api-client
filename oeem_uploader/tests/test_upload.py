@@ -2,6 +2,7 @@ from unittest import TestCase
 from oeem_uploader.request import Request
 from oeem_uploader.upload import upload_record
 import pandas as pd
+import os 
 
 class TestUpload(TestCase):
 
@@ -37,4 +38,12 @@ class TestUpload(TestCase):
 class TestUploadWithFixtures(TestCase):
     @classmethod
     def setUp(self):
-        self.consumption_records = "nothing for now"
+        self.consumption_records = os.path.join(
+                                                os.path.dirname(__file__),
+                                                "fixtures/consumption.csv"
+                                                )
+
+        self.project_records = os.path.join(
+                                            os.path.dirname(__file__),
+                                            "fixtures/projects.csv"
+                                            )
