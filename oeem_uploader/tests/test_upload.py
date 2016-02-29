@@ -1,7 +1,7 @@
 from unittest import TestCase
 from oeem_uploader.request import Request
 from oeem_uploader.upload import upload_record
-
+import pandas as pd
 
 class TestUpload(TestCase):
 
@@ -34,3 +34,7 @@ class TestUpload(TestCase):
     def test_upload_and_update_project(self):
         pass
 
+class TestUploadWithFixtures(TestCase):
+    @classmethod
+    def setUp(self):
+        self.consumption_records = "nothing for now"
