@@ -18,6 +18,39 @@ def upload_consumption(records):
 def process_response():
     pass
 
+def upload_projects(records):
+    """
+    Takes in a list of projects,
+    uploads them to the configured datastore.
+    """
+    ### functionalize and map this rather than for loop
+    request = Request()
+    for record in records:
+        r = get_or_create_project(record)
+        if r.status_code == 200:
+            pass
+        else:
+            attempt_update_project(record)
+
+def attempt_update_project(project):
+    """
+    Takes a project and attempts an UPDATE
+    """
+    get_project_from_server 
+    if projects == same():
+        pass 
+        """log(already online)"""
+    else:
+        if should_i_update():
+            project.update()
+
+def should_project_update(project):
+    """
+    Returns True/False if a project should
+    HTTP update or not. 
+    """
+    pass
+
 
 def get_or_create(item_name, extra_info, get_url, create_url, data):
 
@@ -85,37 +118,4 @@ def get_or_create_project(project_id, project_owner_id,
 
     return get_or_create("Project", project_id, get_url, create_url, data,
             token, verify=True, verbose=True)
-
-def upload_projects(records):
-    """
-    Takes in a list of projects,
-    uploads them to the configured datastore.
-    """
-    ### functionalize and map this rather than for loop
-    request = Request()
-    for record in records:
-        r = get_or_create_project(record)
-        if r.status_code == 200:
-            pass
-        else:
-            attempt_update_project(record)
-
-def attempt_update_project(project):
-    """
-    Takes a project and attempts an UPDATE
-    """
-    get_project_from_server 
-    if projects == same():
-        pass 
-        """log(already online)"""
-    else:
-        if should_i_update():
-            project.update()
-
-def should_project_update(project):
-    """
-    Returns True/False if a project should
-    HTTP update or not. 
-    """
-    pass
 
