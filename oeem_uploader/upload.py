@@ -1,6 +1,11 @@
 #from concurrent.futures import ThreadPoolExecutor
 from oeem_uploader.request import Request
 
+from eemeter.location import Location
+from eemeter.evaluation import Period
+from eemeter.consumption import ConsumptionData
+from eemeter.project import Project
+
 def upload_consumption(records):
     """
     Takes in a list of consumption records, uploads
@@ -118,4 +123,37 @@ def get_or_create_project(project_id, project_owner_id,
 
     return get_or_create("Project", project_id, get_url, create_url, data,
             token, verify=True, verbose=True)
+
+def create_eemeter_project(project_row, consumption_data_rows):
+    """
+    Given a row a pd.DataFrame for projects
+    and a set of rows for consumption data rows, 
+    return eemeter project. 
+    """
+    location = Location( zipcode=project_row.zipcode,
+            lat_lng=(project_row.latitude, project_row.longitude),
+            station=project_row.weather_station)
+    baseline_period = Period(project_row.baseline_period_start, project_row.baseline_period_end)
+    reporting_period = Period(project_row.reporting_period_start, project_row.reporting_period_end)
+    consumptions = _create_eemeter_consumptions(consumption_data_rows)
+    project = Project(location, consumptions, baseline_period, reporting_period)
+
+    return project
+
+def _create_eemeter_consumptions(consumption_data_rows):
+    """
+    from consumption data rows create eemeter objects
+    """
+    natural_gas_records = [{"start": row.start, "end": row.end, "value": row.value}
+            for _, row in consumption_data_rows[consumption_data_rows.fuel_type == "natural_gas"].iterrows()]
+    electricity_records = [{"start": row.start, "end": row.end, "value": row.value}
+            for _, row in consumption_data_rows[consumption_data_rows.fuel_type == "electricity"].iterrows()]
+    consumption = []
+    if len(natural_gas_records) > 0:
+        cd_g = ConsumptionData(natural_gas_records, "natural_gas", "therm", record_type="arbitrary")
+        consumption.append(cd_g)
+    if len(electricity_records) > 0:
+        cd_e = ConsumptionData(electricity_records, "electricity", "kWh", record_type="arbitrary")
+        consumption.append(cd_e)
+    return consumption
 
