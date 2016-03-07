@@ -1,53 +1,17 @@
-#from concurrent.futures import ThreadPoolExecutor
-from oeem_uploader.request import Requester
-
+from .requester import Requester
+from .uploaders import ProjectUploader
+from .uploaders import ProjectAttributeUploader
+from .uploaders import ProjectAttributeKeyUploader
+from .uploaders import ConsumptionMetadataUploader
+from . import constants
+from datetime import date, datetime
 from eemeter.location import Location
 from eemeter.evaluation import Period
 from eemeter.consumption import ConsumptionData
 from eemeter.project import Project
-
-from datetime import date, datetime
-import pytz
-
-import re
-
 import pandas as pd
-
-PROJECT_ATTRIBUTE_KEY_URL = 'project_attribute_keys/'
-PROJECT_URL = 'projects/'
-PROJECT_ATTRIBUTE_URL = 'project_attributes/'
-CONSUMPTION_METADATA_URL = 'consumption_metadatas/'
-CONSUMPTION_RECORD_URL = 'consumption_records/'
-
-STANDARD_PROJECT_DATA_COLUMN_NAMES = [
-    "project_id",
-    "zipcode",
-    "weather_station",
-    "latitude",
-    "longitude",
-    "baseline_period_start", # handle this specially? it won't appear in most project dataframes
-    "baseline_period_end",
-    "reporting_period_start",
-    "reporting_period_end", # handle this specially? it won't appear in most project dataframes
-]
-
-STANDARD_PROJECT_ATTRIBUTE_KEYS = {
-    "predicted_electricity_savings": {
-        "name": "predicted_electricity_savings",
-        "display_name": "Estimated Electricity Savings",
-        "data_type": "FLOAT",
-    },
-    "predicted_natural_gas_savings": {
-        "name": "predicted_natural_gas_savings",
-        "display_name": "Estimated Natural Gas Savings",
-        "data_type": "FLOAT",
-    },
-    "project_cost": {
-        "name": "project_cost",
-        "display_name": "Project Cost",
-        "data_type": "FLOAT",
-    },
-}
+import pytz
+import re
 
 def upload_dataset(project_csv, consumption_csv, url, access_token, verbose=True):
     """
@@ -66,7 +30,8 @@ def upload_dataset(project_csv, consumption_csv, url, access_token, verbose=True
     # project attribute keys
     project_attribute_keys_data = _get_project_attribute_keys_data(project_df)
     for data in project_attribute_keys_data:
-        project_attribute_key_uploader.sync(data)
+        response_data = project_attribute_key_uploader.sync(data)
+        import pdb;pdb.set_trace()
 
     for project_data, project_attributes_data in \
             _get_project_data(project_df, project_attribute_keys_data):
@@ -94,11 +59,11 @@ def _get_project_attribute_keys_data(project_df):
     project_attribute_keys_data = []
     for column_name in project_df.columns:
 
-        if column_name in STANDARD_PROJECT_DATA_COLUMN_NAMES:
+        if column_name in constants.STANDARD_PROJECT_DATA_COLUMN_NAMES:
             continue
 
-        if column_name in STANDARD_PROJECT_ATTRIBUTE_KEYS:
-            project_attribute_key = STANDARD_PROJECT_ATTRIBUTE_KEYS[column_name]
+        if column_name in constants.STANDARD_PROJECT_ATTRIBUTE_KEYS:
+            project_attribute_key = constants.STANDARD_PROJECT_ATTRIBUTE_KEYS[column_name]
             project_attribute_key_data = {
                 "name": project_attribute_key["name"],
                 "display_name": project_attribute_key["display_name"],
@@ -254,150 +219,3 @@ def _process_raw_consumption_records_data(records):
         }
         consumption_records_data.append(record)
     return consumption_records_data
-
-class BaseUploader(object):
-
-    item_name = None
-
-    def __init__(self, requester, verbose=True):
-        self.requester = requester
-        self.verbose = verbose
-
-    def sync(self, data):
-        response_data, created = self.get_or_create(data)
-
-        if not created and self.should_update(data, response_data):
-            self.update(data)
-
-    def get_or_create(self, data):
-        descriptor = self.get_descriptor(data)
-        urls = self.get_urls(data)
-
-        read_response = self.requester.get(urls["read"])
-
-        if read_response.status_code != 200:
-            message = "GET error ({}): {}\n{}".format(
-                    read_response.status_code, get_url, read_response.text)
-            raise ValueError(message)
-
-        read_response_data = read_response.json()
-        pks = [item["id"] for item in read_response_data]
-
-        if pks == []:
-            create_response = self.requester.post(urls["create"], data)
-
-            if create_response.status_code != 201:
-                message = "Create POST error ({}): {}\n{}\n{}".format(
-                        create_response.status_code, create_url, data, create_response.text)
-                raise ValueError(message)
-
-            create_response_data = create_response.json()
-            pk = repsonse_data["id"]
-
-            if self.verbose:
-                print("Created {} ({}, pk={})".format(self.item_name,
-                                                      descriptor, pk))
-
-            return create_response_data, True
-
-        else:
-            if len(pks) > 1:
-                message = (
-                    "Found multiple {} instances ({}) for {}"
-                    .format(self.item_name, pks, descriptor)
-                )
-                warnings.warn(message)
-
-            if self.verbose:
-                print("Existing {} ({}, pks={})".format(self.item_name,
-                                                        descriptor, pks))
-
-            return read_response_data, False
-
-    def get_descriptor(self, data):
-        raise NotImplementedError
-
-    def get_urls(self, data):
-        return {
-            "create": self.get_create_url(data),
-            "read": self.get_read_url(data),
-        }
-
-    def get_read_url(self, data):
-        raise NotImplementedError
-
-    def get_create_url(self, data):
-        raise NotImplementedError
-
-
-    def should_update(self, data, response_data):
-        """
-        Returns True/False if a project should
-        HTTP update or not.
-        """
-        # just log for now
-        print("Should update? \n\nNew:\n{}\nOld\n{}".format(data, response_data))
-        return False
-
-    def update(self, data):
-        print("Updating:\n\n{}".format(data))
-
-
-class ProjectAttributeKeyUploader(BaseUploader):
-
-    item_name = "ProjectAttributeKey"
-
-    def get_descriptor(self, data):
-        return data["name"]
-
-    def get_read_url(self, data):
-        return PROJECT_ATTRIBUTE_KEY_URL + "?name={}".format(data["name"])
-
-    def get_create_url(self, data):
-        return PROJECT_ATTRIBUTE_KEY_URL
-
-class ProjectUploader(BaseUploader):
-
-    item_name = "Project"
-
-    def get_descriptor(self, data):
-        return data["project_id"]
-
-    def get_read_url(self, data):
-        return PROJECT_URL + "?project_id={}".format(data["project_id"])
-
-    def get_create_url(self, data):
-        return PROJECT_URL
-
-class ProjectAttributeUploader(BaseUploader):
-
-    item_name = "ProjectAttribute"
-
-    def get_descriptor(self, data):
-        return data["key"]
-
-    def get_read_url(self, data):
-        return (
-            PROJECT_ATTRIBUTE_URL +
-            "?project={}&key={}".format(data["project"], data["key"])
-        )
-
-    def get_create_url(self, data):
-        return PROJECT_ATTRIBUTE_URL
-
-class ConsumptionMetadataUploader(BaseUploader):
-
-    item_name = "ConsumptionMetadata"
-
-    def get_descriptor(self, data):
-        return data["key"]
-
-    def get_read_url(self, data):
-        return (
-            CONSUMPTION_METADATA_URL +
-            "?projects={}&fuel_type={}&energy_unit={}"
-            .format(data["project"], data["fuel_type"], data["energy_unit"])
-        )
-
-    def get_create_url(self, data):
-        return CONSUMPTION_METADATA_URL
