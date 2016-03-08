@@ -33,3 +33,13 @@ STANDARD_PROJECT_ATTRIBUTE_KEYS = {
         "data_type": "FLOAT",
     },
 }
+
+FUEL_TYPES = {
+    "electricity": "E",
+    "natural_gas": "NG",
+}
+
+ENERGY_UNIT = {
+    "kWh": "KWH",
+    "therms": "THM",
+}
