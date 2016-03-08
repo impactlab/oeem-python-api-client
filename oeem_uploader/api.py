@@ -14,14 +14,34 @@ import pandas as pd
 import pytz
 import re
 
-def upload_dataset(project_csv, consumption_csv, url, access_token, project_owner, verbose=True):
+__all__ = [
+    'upload_dicts',
+    'upload_csvs',
+    'upload_dataframes',
+]
+
+
+def upload_dicts(project_dict, consumption_dict, url, access_token, project_owner, verbose=True):
+
+    project_df, consumption_df = _dicts_to_dataframes(project_dict,
+                                                      consumption_dict)
+
+    upload_dataframes(project_df, consumption_df, url, access_token, project_owner, verbose)
+
+
+def upload_csvs(project_csv_file, consumption_csv_file, url, access_token, project_owner, verbose=True):
+
+    project_df, consumption_df = _csvs_to_dataframes(project_csv_file,
+                                                     consumption_csv_file)
+
+    upload_dataframes(project_df, consumption_df, url, access_token, project_owner, verbose)
+
+
+def upload_dataframes(project_df, consumption_df, url, access_token, project_owner, verbose=True):
     """
     Main entrypoint - takes in formatted project and consumption data and
     uploads it to the given url.
     """
-    project_df, consumption_df = _convert_to_dataframes(project_csv,
-                                                        consumption_csv)
-
     requester = Requester(url, access_token)
     project_attribute_key_uploader = ProjectAttributeKeyUploader(requester, verbose)
     project_uploader = ProjectUploader(requester, verbose)
@@ -85,7 +105,12 @@ def upload_dataset(project_csv, consumption_csv, url, access_token, project_owne
         consumption_records_response_data = consumption_record_uploader.sync(consumption_records_data)
 
 
-def _convert_to_dataframes(project_csv, consumption_csv):
+def _dicts_to_dataframes(project_dict, consumption_dict):
+    project_df = pd.DataFrame(project_dict)
+    consumption_df = pd.DataFrame(consumption_dict)
+    return project_df, consumption_df
+
+def _csvs_to_dataframes(project_csv, consumption_csv):
     project_df = pd.read_csv(project_csv)
     project_df.baseline_period_end = pd.to_datetime(project_df.baseline_period_end)
     project_df.reporting_period_start = pd.to_datetime(project_df.reporting_period_start)
