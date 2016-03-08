@@ -3,6 +3,7 @@ from .uploaders import ProjectUploader
 from .uploaders import ProjectAttributeUploader
 from .uploaders import ProjectAttributeKeyUploader
 from .uploaders import ConsumptionMetadataUploader
+from .uploaders import ConsumptionRecordUploader
 from . import constants
 from datetime import date, datetime
 from eemeter.location import Location
@@ -13,7 +14,7 @@ import pandas as pd
 import pytz
 import re
 
-def upload_dataset(project_csv, consumption_csv, url, access_token, verbose=True):
+def upload_dataset(project_csv, consumption_csv, url, access_token, project_owner, verbose=True):
     """
     Main entrypoint - takes in formatted project and consumption data and
     uploads it to the given url.
@@ -26,29 +27,68 @@ def upload_dataset(project_csv, consumption_csv, url, access_token, verbose=True
     project_uploader = ProjectUploader(requester, verbose)
     project_attribute_uploader = ProjectAttributeUploader(requester, verbose)
     consumption_metadata_uploader = ConsumptionMetadataUploader(requester, verbose)
+    consumption_record_uploader = ConsumptionRecordUploader(requester, verbose)
 
     # project attribute keys
     project_attribute_keys_data = _get_project_attribute_keys_data(project_df)
     for data in project_attribute_keys_data:
-        response_data = project_attribute_key_uploader.sync(data)
-        import pdb;pdb.set_trace()
 
+        # sync the project attribute keys
+        response_data = project_attribute_key_uploader.sync(data)
+
+        data.update(response_data) # adds the "id" field
+
+    project_ids = {}
     for project_data, project_attributes_data in \
             _get_project_data(project_df, project_attribute_keys_data):
-        # TODO actually upload projects
-        # TODO replace attribute key name with id obtained from sync above ^^
-        pass
+
+        # upload project
+        project_data["project_owner"] = project_owner
+        project_response_data = project_uploader.sync(project_data)
+
+        # store project_id to speed things up a bit in the consumption data uploading
+        project_id = project_response_data["project_id"]
+        project_pk = project_response_data["id"]
+        project_ids[project_pk] = project_id
+
+        for project_attribute_data in project_attributes_data:
+
+            # add the project pk to the project attribute data
+            project_attribute_data["project"] = project_pk
+
+            # sync the project attribute
+            project_attribute_data = project_attribute_uploader.sync(project_attribute_data)
 
     for consumption_metadata_data, consumption_records_data in \
             _get_consumption_data(consumption_df):
 
-        # TODO actually upload consumption metadata, potentially replacing with
-        #   ids obtained above.
-        # TODO update datastore to take bulk consumption records
-        pass
+        project_id = consumption_metadata_data.pop("project_id")
+
+        # find the project pk
+        if project_id in project_ids:
+            consumption_metadata_data["id"] = project_ids[project_id]
+        else:
+            project_data = {
+                "project_id": project_id,
+                "project_owner": project_owner,
+            }
+            project_response_data = project_uploader.sync(project_data)
+            consumption_metadata_data["project"] = project_response_data["id"]
+
+
+        consumption_metadata_response_data = consumption_metadata_uploader.sync(consumption_metadata_data)
+        consumption_metadata_id = consumption_metadata_response_data["id"]
+
+        for consumption_record_data in consumption_records_data:
+            consumption_record_data["metadata"] = consumption_metadata_id
+
+        consumption_records_response_data = consumption_record_uploader.sync(consumption_records_data)
+
 
 def _convert_to_dataframes(project_csv, consumption_csv):
     project_df = pd.read_csv(project_csv)
+    project_df.baseline_period_end = pd.to_datetime(project_df.baseline_period_end)
+    project_df.reporting_period_start = pd.to_datetime(project_df.reporting_period_start)
     consumption_df = pd.read_csv(consumption_csv)
     consumption_df.start = pd.to_datetime(consumption_df.start)
     consumption_df.end = pd.to_datetime(consumption_df.end)
@@ -126,24 +166,25 @@ def _get_project_data(project_df, project_attribute_keys_data):
             "latitude": row.latitude,
             "longitude": row.longitude,
             "baseline_period_start": None,
-            "baseline_period_end": row.baseline_period_end,
-            "reporting_period_start": row.reporting_period_start,
+            "baseline_period_end": pytz.UTC.localize(row.baseline_period_end).strftime("%Y-%m-%dT%H:%M:%S%z"),
+            "reporting_period_start": pytz.UTC.localize(row.reporting_period_start).strftime("%Y-%m-%dT%H:%M:%S%z"),
             "reporting_period_end": None,
         }
 
         project_attributes_data = []
         for project_attribute_key_data in project_attribute_keys_data:
-            data_type = project_attribute_key_data["data_type"]
-            name = project_attribute_key_data["name"]
-            project_attribute_data = _get_project_attribute_data(row, name, data_type)
+            project_attribute_data = _get_project_attribute_data(row, project_attribute_key_data)
             project_attributes_data.append(project_attribute_data)
 
         yield project_data, project_attributes_data
 
-def _get_project_attribute_data(row, name, data_type):
+def _get_project_attribute_data(row, project_attribute_key_data):
+
+    name = project_attribute_key_data["name"]
+    data_type = project_attribute_key_data["data_type"]
 
     project_attribute_data = {
-        "name": name,
+        "key": project_attribute_key_data["id"],
     }
 
     if data_type == "BOOLEAN":
@@ -155,7 +196,7 @@ def _get_project_attribute_data(row, name, data_type):
     elif data_type == "DATETIME":
         # check format, but keep as string
         dt = datetime.strptime(row[name], "%Y-%m-%dT%H:%M:%S%z")
-        project_attribute_data["datetime_value"] = row["name"]
+        project_attribute_data["datetime_value"] = row[name]
     elif data_type == "FLOAT":
         project_attribute_data["float_value"] = float(row[name])
     elif data_type == "INTEGER":
@@ -173,8 +214,8 @@ def _get_consumption_data(consumption_df):
 
             consumption_metadata_data = {
                 "project_id": project_id,
-                "fuel_type": fuel_type,
-                "unit_name": unique_unit_names[0],
+                "fuel_type": constants.FUEL_TYPES[fuel_type],
+                "energy_unit": constants.ENERGY_UNIT[unique_unit_names[0]],
             }
             consumption_records_data = _get_consumption_records_data(
                     fuel_type_consumption)
@@ -213,9 +254,9 @@ def _process_raw_consumption_records_data(records):
     for (d1, value), (d2, estimated) in zip(consumption_data.data.iteritems(), consumption_data.estimated.iteritems()):
         assert d1 == d2
         record = {
-            "date": pytz.UTC.localize(d1.to_datetime()).strftime("%Y-%m-%dT%H:%M:%S%z"),
+            "start": pytz.UTC.localize(d1.to_datetime()).strftime("%Y-%m-%dT%H:%M:%S%z"),
             "value": value,
-            "estimated": estimated,
+            "estimated": bool(estimated),
         }
         consumption_records_data.append(record)
     return consumption_records_data

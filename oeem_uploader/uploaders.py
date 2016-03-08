@@ -21,10 +21,10 @@ How to use an uploader class::
 from . import constants
 
 
-
 class BaseUploader(object):
 
     item_name = None
+    many = False
 
     def __init__(self, requester, verbose=True):
         self.requester = requester
@@ -33,10 +33,23 @@ class BaseUploader(object):
     def sync(self, data):
         response_data, created = self.get_or_create(data)
 
-        if not created and self.should_update(data, response_data):
+        if created:
+            return response_data
+
+        if len(response_data) > 1 and not self.many:
+            message = (
+                "More than one response received:\n {}"
+                .format(response_data)
+            )
+            raise ValueError(message)
+
+        if self.should_update(data, response_data):
             return self.update(data)
 
-        return response_data
+        if self.many:
+            return response_data
+        else:
+            return response_data[0]
 
     def get_or_create(self, data):
         descriptor = self.get_descriptor(data)
@@ -45,8 +58,8 @@ class BaseUploader(object):
         read_response = self.requester.get(urls["read"])
 
         if read_response.status_code != 200:
-            message = "GET error ({}): {}\n{}".format(
-                    read_response.status_code, get_url, read_response.text)
+            message = "Read error GET ({}): {}\n{}".format(
+                    read_response.status_code, urls["read"], read_response.text)
             raise ValueError(message)
 
         read_response_data = read_response.json()
@@ -56,21 +69,29 @@ class BaseUploader(object):
             create_response = self.requester.post(urls["create"], data)
 
             if create_response.status_code != 201:
-                message = "Create POST error ({}): {}\n{}\n{}".format(
-                        create_response.status_code, create_url, data, create_response.text)
+                message = "Create error POST ({}): {}\n{}\n{}".format(
+                        create_response.status_code, urls["create"], data, create_response.text)
                 raise ValueError(message)
 
             create_response_data = create_response.json()
-            pk = repsonse_data["id"]
+            if self.many:
+                pks = [response_data["id"] for response_data in create_response_data]
+            else:
+                pk = create_response_data["id"]
 
             if self.verbose:
-                print("Created {} ({}, pk={})".format(self.item_name,
-                                                      descriptor, pk))
+
+                if self.many:
+                    print("Created {} ({}, pks={})".format(self.item_name,
+                                                          descriptor, pks))
+                else:
+                    print("Created {} ({}, pk={})".format(self.item_name,
+                                                          descriptor, pk))
 
             return create_response_data, True
 
         else:
-            if len(pks) > 1:
+            if len(pks) > 1 and not self.many:
                 message = (
                     "Found multiple {} instances ({}) for {}"
                     .format(self.item_name, pks, descriptor)
@@ -105,11 +126,11 @@ class BaseUploader(object):
         HTTP update or not.
         """
         # just log for now
-        print("Should update? \n\nNew:\n{}\nOld\n{}".format(data, response_data))
+        print("Should update? N".format(data, response_data))
         return False
 
     def update(self, data):
-        print("Updating:\n\n{}".format(data))
+        print("Updating: {}".format(data))
 
 
 class ProjectAttributeKeyUploader(BaseUploader):
@@ -128,6 +149,7 @@ class ProjectAttributeKeyUploader(BaseUploader):
     def get_create_url(self, data):
         return constants.PROJECT_ATTRIBUTE_KEY_URL
 
+
 class ProjectUploader(BaseUploader):
 
     item_name = "Project"
@@ -140,6 +162,7 @@ class ProjectUploader(BaseUploader):
 
     def get_create_url(self, data):
         return constants.PROJECT_URL
+
 
 class ProjectAttributeUploader(BaseUploader):
 
@@ -157,19 +180,39 @@ class ProjectAttributeUploader(BaseUploader):
     def get_create_url(self, data):
         return constants.PROJECT_ATTRIBUTE_URL
 
+
 class ConsumptionMetadataUploader(BaseUploader):
 
     item_name = "ConsumptionMetadata"
 
     def get_descriptor(self, data):
-        return data["key"]
+        return "{}/{}".format(data["project"], data["fuel_type"])
 
     def get_read_url(self, data):
         return (
             constants.CONSUMPTION_METADATA_URL +
-            "?projects={}&fuel_type={}&energy_unit={}"
-            .format(data["project"], data["fuel_type"], data["energy_unit"])
+            "?project={}&fuel_type={}&summary=True"
+            .format(data["project"], data["fuel_type"])
         )
 
     def get_create_url(self, data):
-        return constants.CONSUMPTION_METADATA_URL
+        return constants.CONSUMPTION_METADATA_URL + "?summary=True"
+
+
+class ConsumptionRecordUploader(BaseUploader):
+
+    item_name = "ConsumptionRecord"
+    many = True
+
+    def get_descriptor(self, data):
+        return "n={}".format(len(data))
+
+    def get_read_url(self, data):
+        return (
+            constants.CONSUMPTION_RECORD_URL +
+            "?metadata={}"
+            .format(data[0]["metadata"])
+        )
+
+    def get_create_url(self, data):
+        return constants.CONSUMPTION_RECORD_URL
